@@ -18,10 +18,11 @@ import { createRequire } from 'module';
 let db: import('better-sqlite3').Database | null = null;
 
 try {
+  const dbPath = process.env['DB_PATH'] ?? './monopoly-deal.db';
   const require = createRequire(import.meta.url);
   const Database = require('better-sqlite3') as typeof import('better-sqlite3');
-  db = new (Database as any)('./monopoly-deal.db') as import('better-sqlite3').Database;
-  console.log('SQLite database opened: ./monopoly-deal.db');
+  db = new (Database as any)(dbPath) as import('better-sqlite3').Database;
+  console.log(`SQLite database opened: ${dbPath}`);
 } catch (e) {
   console.warn('SQLite not available — scoreboard disabled:', (e as Error).message);
 }

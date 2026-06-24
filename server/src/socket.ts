@@ -197,21 +197,16 @@ function handleGameOver(
     recordRoundEnd(state.roundId, state.winnerId);
   }
 
-  // Build scoreboard from DB (wins in this room); fall back to in-memory score
+  // Merge DB wins with live game state for this round's final positions
   const dbScoreboard = getMatchScoreboard(room.code);
-  const scoreboard: ScoreEntry[] = dbScoreboard.length > 0
-    ? dbScoreboard.map(row => ({
-        playerId: row.playerId,
-        playerName: row.name,
-        completeSets: 0,
-        bankTotal: 0,
-      }))
-    : state.players.map(p => ({
-        playerId: p.id,
-        playerName: p.name,
-        completeSets: p.propertySets.filter(s => s.cards.length > 0).length,
-        bankTotal: p.bank.length,
-      }));
+  const winsMap = new Map(dbScoreboard.map(row => [row.playerId, row.wins]));
+  const scoreboard: ScoreEntry[] = state.players.map(p => ({
+    playerId: p.id,
+    playerName: p.name,
+    completeSets: p.propertySets.filter(s => s.cards.length > 0).length,
+    bankTotal: p.bank.length,
+    wins: winsMap.get(p.id) ?? 0,
+  }));
 
   io.to(room.code).emit('game:over', { winnerId: state.winnerId, scoreboard });
 
@@ -353,7 +348,7 @@ export function setupSocketHandlers(io: Server<ClientEvents, ServerEvents>): voi
       const room = getRoomByPlayerId(playerId);
       if (!room) return sendError(socket, 'NOT_IN_ROOM', 'Room not found');
       if (room.hostId !== playerId) return sendError(socket, 'NOT_HOST', 'Only the host can start the game');
-      if (room.gameState) return sendError(socket, 'ALREADY_STARTED', 'Game already started');
+      if (room.gameState && !room.gameState.winnerId) return sendError(socket, 'ALREADY_STARTED', 'Game already started');
       if (room.players.size < 2) return sendError(socket, 'NOT_ENOUGH_PLAYERS', 'Need at least 2 players to start');
 
       const playerList = Array.from(room.players.values());
@@ -363,7 +358,7 @@ export function setupSocketHandlers(io: Server<ClientEvents, ServerEvents>): voi
       );
 
       room.gameState = gameState;
-      room.matchId = generateMatchId();
+      if (!room.matchId) room.matchId = generateMatchId();
 
       // Record in DB
       recordRoundStart(

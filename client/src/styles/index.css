@@ -775,7 +775,7 @@ html, body, #root {
 .my-area__properties { flex: 1; min-width: 0; }
 
 .my-area__hand-row { display: flex; gap: 0.8rem; align-items: flex-end; }
-.my-area__hand { flex: 1; min-width: 0; overflow: hidden; }
+.my-area__hand { flex: 1; min-width: 0; overflow: visible; }
 .my-area__controls {
   flex-shrink: 0;
   display: flex;

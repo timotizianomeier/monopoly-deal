@@ -99,8 +99,8 @@ export function useSocket(): SocketHook {
 
     sock.on('game:view', (payload: { view: RedactedGameView }) => {
       setGameView(payload.view);
-      if (payload.view.phase === 'FINISHED') {
-        // Keep showing game screen; RoundOverModal handles it
+      if (!payload.view.winnerId) {
+        setGameOver(null);
       }
       if (payload.view.phase !== 'WAITING') {
         setPhase('game');

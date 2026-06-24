@@ -27,7 +27,7 @@ export function shuffleArray<T>(arr: T[], rng: RngFn): T[] {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
+    [a[i], a[j]] = [a[j]!, a[i]!];
   }
   return a;
 }
@@ -85,7 +85,7 @@ export function shuffleWithSeed<T>(arr: T[], seed: number): { result: T[]; newSe
     const { value, newSeed } = nextRng(currentSeed);
     currentSeed = newSeed;
     const j = Math.floor(value * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
+    [a[i], a[j]] = [a[j]!, a[i]!];
   }
   return { result: a, newSeed: currentSeed };
 }

@@ -28,6 +28,7 @@ export interface ScoreEntry {
   playerName: string;
   completeSets: number;
   bankTotal: number;
+  wins?: number;
 }
 
 // ---------------------------------------------------------------------------

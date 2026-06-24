@@ -32,8 +32,9 @@ export default function RoundOverModal({ gameOver, socket }: RoundOverModalProps
               <thead>
                 <tr>
                   <th>Player</th>
-                  <th>Complete Sets</th>
-                  <th>Bank Total</th>
+                  <th>Wins</th>
+                  <th>Sets</th>
+                  <th>Bank</th>
                 </tr>
               </thead>
               <tbody>
@@ -51,7 +52,8 @@ export default function RoundOverModal({ gameOver, socket }: RoundOverModalProps
                       {entry.playerId === socket.playerId && <span className="scoreboard-table__you"> (You)</span>}
                       {entry.playerId === gameOver.winnerId && <span className="scoreboard-table__crown"> 🏆</span>}
                     </td>
-                    <td>{entry.completeSets} ✓</td>
+                    <td>{entry.wins ?? 0}</td>
+                    <td>{entry.completeSets}</td>
                     <td>${entry.bankTotal}M</td>
                   </tr>
                 ))}
