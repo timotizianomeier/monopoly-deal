@@ -117,108 +117,254 @@ html, body, #root {
 .card--selected { outline: 3px solid var(--gold); transform: translateY(-6px); }
 .card--disabled { opacity: 0.55; cursor: not-allowed; }
 .card--facedown {
-  background: #1a3a8a;
-  background-image: repeating-linear-gradient(45deg, rgba(255,255,255,0.05) 0, rgba(255,255,255,0.05) 2px, transparent 2px, transparent 8px);
+  background: #b03a2e;
+  background-image: repeating-linear-gradient(45deg, rgba(255,255,255,0.06) 0, rgba(255,255,255,0.06) 2px, transparent 2px, transparent 8px);
 }
-.card__back { font-size: 2rem; color: #fff; display: flex; align-items: center; justify-content: center; flex: 1; }
+.card__back {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid rgba(255,255,255,0.4);
+  border-radius: 4px;
+  margin: 4px;
+}
+.card__back-oval {
+  background: rgba(255,255,255,0.9);
+  color: #b03a2e;
+  font-weight: 900;
+  font-size: 0.75rem;
+  letter-spacing: 0.03em;
+  border-radius: 50%;
+  padding: 0.45em 0.5em;
+  transform: rotate(-18deg);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+.card--tiny .card__back-oval { font-size: 0.55rem; }
 
-/* Money card */
+/* Corner value badge (all face-up cards) */
+.card__value-badge {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1.5px solid #2c3e50;
+  color: #2c3e50;
+  font-size: 0.58rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  z-index: 2;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.25);
+}
+.card__value-badge-m { font-size: 0.42rem; font-weight: 700; }
+.card--tiny .card__value-badge { width: 13px; height: 13px; font-size: 0.48rem; }
+.card--tiny .card__value-badge-m { display: none; }
+
+/* SVG art shared */
+.card-art { width: 100%; height: 100%; display: block; }
+
+/* Money card — white bill with colored double border and denomination oval */
 .card__money {
   flex: 1;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #2e7d32 30%, #388e3c 100%);
-  color: #fff;
-  padding: 0.4rem;
+  background: #fdfbf3;
+  border: 3px double;
+  border-radius: var(--card-radius);
+  margin: 2px;
+  padding: 0.3rem;
+  position: relative;
 }
-.card__money-amount { font-size: 1.4rem; font-weight: 800; }
-.card--small .card__money-amount { font-size: 1rem; }
-.card--tiny .card__money-amount { font-size: 0.8rem; }
+.card__money-oval {
+  border-radius: 50%;
+  padding: 0.55em 0.5em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 0 0 1.5px rgba(255,255,255,0.55);
+}
+.card__money-amount { font-size: 0.95rem; font-weight: 900; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.35); white-space: nowrap; }
+.card--small .card__money-amount { font-size: 0.75rem; }
+.card--tiny .card__money-amount { font-size: 0.6rem; }
 
-/* Property card */
+/* Property card — title-deed style: color band on top, rent ladder below */
 .card__property {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 0.3rem 0.2rem;
-  font-size: 0.7rem;
+  background: #fdfbf3;
   position: relative;
 }
-.card__property-label { font-weight: 800; font-size: 0.65rem; text-transform: uppercase; }
-.card__property-name { font-size: 0.6rem; opacity: 0.9; line-height: 1.2; }
-.card__property-rent { font-size: 0.65rem; opacity: 0.85; }
-.card__property-set { font-size: 0.6rem; opacity: 0.7; }
-.card__bank-value-overlay {
-  position: absolute;
-  bottom: 2px;
-  right: 4px;
-  font-size: 0.6rem;
-  font-weight: 700;
-  background: rgba(0,0,0,0.2);
-  border-radius: 3px;
-  padding: 1px 3px;
+.card__property-band {
+  padding: 18px 3px 3px;
+  font-size: 0.55rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  text-align: center;
+  line-height: 1.15;
+  letter-spacing: 0.01em;
+  border-bottom: 1.5px solid rgba(0,0,0,0.35);
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.card--small .card__property-band { font-size: 0.45rem; padding-top: 16px; min-height: 28px; }
+.card--tiny .card__property-band { padding: 2px; min-height: 0; flex: 1; font-size: 0.45rem; }
+.card__property-band.text-dark { color: #222; }
+.card__property-band.text-light { color: #fff; text-shadow: 0 1px 1px rgba(0,0,0,0.35); }
+.card__property-deed {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 3px 4px 3px;
+  color: #333;
+}
+.card__property-rent-ladder { display: flex; flex-direction: column; gap: 1px; }
+.card__property-rent-row {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  font-size: 0.55rem;
+  line-height: 1.25;
+}
+.card--small .card__property-rent-row { font-size: 0.5rem; }
+.card__property-rent-count { font-weight: 700; }
+.card__property-rent-dots { flex: 1; border-bottom: 1px dotted #999; transform: translateY(-2px); }
+.card__property-rent-amount { font-weight: 600; }
+.card__property-set {
+  font-size: 0.5rem;
+  text-align: center;
+  opacity: 0.65;
+  font-style: italic;
+  padding-top: 1px;
 }
 
-/* Wildcard */
+/* Wildcard — two color bands top/bottom with swap arrow between */
 .card__wildcard {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #fdfbf3;
+  position: relative;
+}
+.card__wildcard-band {
+  height: 26%;
+  min-height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.52rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  text-align: center;
+  padding: 2px 18px;
+  border-bottom: 1.5px solid rgba(0,0,0,0.35);
+}
+.card--tiny .card__wildcard-band { padding: 2px 3px; }
+.card__wildcard-band--bottom { border-bottom: none; border-top: 1.5px solid rgba(0,0,0,0.35); }
+.card__wildcard-band.text-dark { color: #222; }
+.card__wildcard-band.text-light { color: #fff; text-shadow: 0 1px 1px rgba(0,0,0,0.35); }
+.card__wildcard-center {
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 0.3rem;
-  gap: 3px;
+  gap: 2px;
 }
-.card__wildcard--rainbow {
-  background: linear-gradient(135deg, #e74c3c, #f39c12, #2ecc71, #3498db, #9b59b6);
-  color: #fff;
-  text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+.card__wildcard-swap { width: 22px; height: 22px; }
+.card--tiny .card__wildcard-swap { width: 14px; height: 14px; }
+.card__wildcard-stripes {
+  display: flex;
+  flex-direction: column;
+  position: absolute;
+  inset: 0;
 }
-.card__wildcard-label { font-weight: 800; font-size: 0.65rem; text-transform: uppercase; }
-.card__wildcard-colors { font-size: 0.6rem; text-align: center; }
+.card__wildcard-stripes > div { flex: 1; }
+.card__wildcard .card__wildcard-center { position: relative; z-index: 1; }
+.card__wildcard-label {
+  font-weight: 900;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  color: #222;
+  background: rgba(255,255,255,0.92);
+  border-radius: 4px;
+  padding: 1px 5px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.25);
+}
+.card--tiny .card__wildcard-label { font-size: 0.5rem; padding: 0 3px; }
+.card__wildcard-colors {
+  font-size: 0.55rem;
+  text-align: center;
+  color: #222;
+  background: rgba(255,255,255,0.92);
+  border-radius: 3px;
+  padding: 0 4px;
+}
 
-/* Rent card */
+/* Rent card — split circle art on parchment */
 .card__rent {
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #b8860b 20%, #daa520 100%);
-  color: #fff;
-  padding: 0.4rem;
-  gap: 4px;
+  background: #fdfbf3;
+  color: #2c3e50;
+  padding: 0.3rem 0.25rem 0.25rem;
+  gap: 2px;
+  position: relative;
 }
-.card__rent-label { font-weight: 800; font-size: 0.75rem; }
-.card__rent-colors { display: flex; gap: 3px; align-items: center; flex-wrap: wrap; justify-content: center; }
-.card__rent-dot { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.5); display: inline-block; }
-.card__rent-wild { font-size: 0.65rem; }
+.card__rent-label { font-weight: 900; font-size: 0.68rem; letter-spacing: 0.14em; }
+.card--tiny .card__rent-label { font-size: 0.5rem; }
+.card__rent-art { width: 60%; max-width: 52px; }
+.card--tiny .card__rent-art { width: 70%; }
+.card__rent-colors-label { font-size: 0.52rem; opacity: 0.75; text-align: center; line-height: 1.15; }
 
-/* Action card */
+/* Action card — white card, accent title, sketch illustration */
 .card__action {
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, #d35400 20%, #e67e22 100%);
-  color: #fff;
-  padding: 0.4rem;
-  gap: 3px;
+  background: #fdfbf3;
+  border: 2px solid;
+  border-radius: var(--card-radius);
+  margin: 2px;
+  padding: 17px 0.2rem 0.22rem;
+  gap: 2px;
   text-align: center;
+  position: relative;
 }
-.card__action-label { font-weight: 800; font-size: 0.7rem; line-height: 1.2; }
-.card__action-effect { font-size: 0.6rem; opacity: 0.9; line-height: 1.2; }
-
-/* Shared bank value */
-.card__bank-value {
-  font-size: 0.6rem;
-  opacity: 0.85;
-  font-weight: 600;
+.card--tiny .card__action { padding-top: 12px; }
+.card__action-label {
+  font-weight: 900;
+  font-size: 0.55rem;
+  line-height: 1.1;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+  padding: 0 2px;
 }
+.card--tiny .card__action-label { font-size: 0.45rem; }
+.card__action-art {
+  flex: 1;
+  width: 62%;
+  max-width: 52px;
+  display: flex;
+  align-items: center;
+  min-height: 0;
+}
+.card--tiny .card__action-art { width: 70%; }
+.card__action-effect { font-size: 0.52rem; opacity: 0.8; line-height: 1.15; color: #333; }
 
 /* ============================================================
    Home Screen
@@ -483,8 +629,8 @@ html, body, #root {
 .pile--draw {
   width: 60px;
   height: 80px;
-  background: #1a3a8a;
-  background-image: repeating-linear-gradient(45deg, rgba(255,255,255,0.05) 0, rgba(255,255,255,0.05) 2px, transparent 2px, transparent 8px);
+  background: #b03a2e;
+  background-image: repeating-linear-gradient(45deg, rgba(255,255,255,0.06) 0, rgba(255,255,255,0.06) 2px, transparent 2px, transparent 8px);
   border-radius: var(--card-radius);
   display: flex;
   flex-direction: column;
@@ -610,7 +756,7 @@ html, body, #root {
 .card-back-mini {
   width: 8px;
   height: 12px;
-  background: #1a3a8a;
+  background: #b03a2e;
   border-radius: 1px;
   border: 1px solid rgba(255,255,255,0.2);
 }
