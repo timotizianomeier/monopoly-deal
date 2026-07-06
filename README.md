@@ -6,6 +6,7 @@ A real-time, browser-based implementation of the Monopoly Deal card game for 2�
 
 - Full Monopoly Deal rules (all action cards, Just Say No chains, rent, houses/hotels)
 - Real-time multiplayer via Socket.IO rooms
+- Original-deck-style card design with hand-drawn SVG art
 - Hand privacy — each player only sees their own cards
 - Reconnection — reload the page to resume your seat
 - SQLite match scoreboard with per-round win tracking
@@ -69,11 +70,7 @@ node server/dist/index.js
    - Size: 1 GB is more than enough
    - Set env var `DB_PATH=/data/monopoly-deal.db`
 
-   Then update `server/src/db.ts` to read the path:
-   ```ts
-   const DB_PATH = process.env['DB_PATH'] ?? './monopoly-deal.db';
-   db = new (Database as any)(DB_PATH);
-   ```
+   The server already reads `DB_PATH` (see `server/src/db.ts`) and falls back to `./monopoly-deal.db` locally.
 
 6. **Port** — Render sets `PORT` automatically; the server reads `process.env['PORT']`.
 
