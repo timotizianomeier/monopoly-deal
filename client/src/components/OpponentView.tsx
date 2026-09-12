@@ -44,13 +44,13 @@ export default function OpponentView({ player, cardMap, compact = false }: Oppon
 
       {!compact && (
         <div className="opponent-view__sets">
-          {player.propertySets.map(set => {
+          {player.propertySets.map((set, idx) => {
             const setSize = SET_SIZES[set.color];
             const isComplete = set.cards.length >= setSize;
             const bgColor = COLOR_MAP[set.color];
             return (
               <div
-                key={set.color}
+                key={`${set.color}-${idx}`}
                 className={['opponent-set', isComplete ? 'opponent-set--complete' : ''].join(' ')}
                 style={{ borderColor: bgColor }}
                 title={`${colorLabel(set.color)}: ${set.cards.length}/${setSize}`}

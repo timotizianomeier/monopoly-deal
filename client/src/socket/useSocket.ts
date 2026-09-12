@@ -70,8 +70,10 @@ export function useSocket(): SocketHook {
       // Auto-reconnect if we have stored credentials
       const storedPlayerId = playerIdRef.current;
       const storedRoomCode = roomCodeRef.current;
+      const storedName = localStorage.getItem('md_name') ?? '';
       if (storedPlayerId && storedRoomCode) {
-        sock.emit('room:join', { roomCode: storedRoomCode, name: '' }, (res: { playerId: string } | { error: string }) => {
+        // Resume our seat: the server matches on playerId first, name is a fallback.
+        sock.emit('room:join', { roomCode: storedRoomCode, name: storedName, playerId: storedPlayerId }, (res: { playerId: string } | { error: string }) => {
           if ('error' in res) {
             // Stored session is no longer valid — clear it
             localStorage.removeItem('md_playerId');
@@ -79,6 +81,7 @@ export function useSocket(): SocketHook {
             setPlayerId(null);
             setRoomCode(null);
             setPhase('home');
+            setError(`Could not resume your seat: ${res.error}`);
           }
         });
       }
@@ -137,6 +140,7 @@ export function useSocket(): SocketHook {
           setRoomCode(res.roomCode);
           localStorage.setItem('md_playerId', res.playerId);
           localStorage.setItem('md_roomCode', res.roomCode);
+          localStorage.setItem('md_name', name);
           resolve(res);
         }
       });
@@ -155,6 +159,7 @@ export function useSocket(): SocketHook {
           setRoomCode(code);
           localStorage.setItem('md_playerId', res.playerId);
           localStorage.setItem('md_roomCode', code);
+          localStorage.setItem('md_name', name);
           resolve(res);
         }
       });

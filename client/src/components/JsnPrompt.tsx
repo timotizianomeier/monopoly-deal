@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import type { PendingInteraction, Card, ActionCard, RedactedPlayerView } from '@monopoly-deal/shared';
 import type { GameAction } from '@monopoly-deal/shared';
 import CardView from './CardView.js';
+import { INTERACTION_TIMEOUT_SECONDS } from '@monopoly-deal/shared';
 
 interface JsnPromptProps {
   interaction: PendingInteraction;
@@ -12,7 +13,7 @@ interface JsnPromptProps {
 }
 
 export default function JsnPrompt({ interaction, myPlayerId, myHand, players, sendAction }: JsnPromptProps) {
-  const [secondsLeft, setSecondsLeft] = useState<number>(30);
+  const [secondsLeft, setSecondsLeft] = useState<number>(INTERACTION_TIMEOUT_SECONDS);
 
   useEffect(() => {
     if (!interaction.expiresAt) return;
@@ -59,7 +60,7 @@ export default function JsnPrompt({ interaction, myPlayerId, myHand, players, se
   }
 
   const timerPct = interaction.expiresAt
-    ? Math.max(0, Math.min(100, (secondsLeft / 30) * 100))
+    ? Math.max(0, Math.min(100, (secondsLeft / INTERACTION_TIMEOUT_SECONDS) * 100))
     : 100;
 
   return (

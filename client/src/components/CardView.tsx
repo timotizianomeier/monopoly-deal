@@ -103,7 +103,10 @@ export default function CardView({ card, size = 'normal', selected, onClick, dis
     return (
       <div className={cls} onClick={!disabled ? onClick : undefined}>
         <div className="card__back">
-          <div className="card__back-oval">MD</div>
+          <div className="card__back-oval">
+            <span className="card__back-brand">MONOPOLY</span>
+            <span className="card__back-deal">DEAL</span>
+          </div>
         </div>
       </div>
     );
@@ -191,19 +194,33 @@ function renderCardContent(card: Card, size: 'normal' | 'small' | 'tiny') {
       }
       const c1 = card.colors[0] ?? 'brown';
       const c2 = card.colors[1] ?? 'brown';
-      return (
-        <div className="card__wildcard">
-          <div className={`card__wildcard-band ${colorTextClass(c1)}`} style={getColorStyle(c1)}>
-            {size !== 'tiny' && colorLabel(c1)}
+      const half = (c: Color, flipped: boolean) => (
+        <div className={['card__wildcard-half', flipped ? 'card__wildcard-half--flipped' : ''].join(' ')}>
+          <div className={`card__wildcard-band ${colorTextClass(c)}`} style={getColorStyle(c)}>
+            {size !== 'tiny' && colorLabel(c)}
           </div>
-          <div className="card__wildcard-center">
+          {size !== 'tiny' && (
+            <div className="card__wildcard-ladder">
+              {RENT_LADDERS[c].map((rent, i) => (
+                <div key={i} className="card__property-rent-row">
+                  <span className="card__property-rent-count">{i + 1}</span>
+                  <span className="card__property-rent-dots" />
+                  <span className="card__property-rent-amount">${rent}M</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+      return (
+        <div className="card__wildcard card__wildcard--two">
+          {half(c1, false)}
+          <div className="card__wildcard-divider">
             <svg viewBox="0 0 24 24" className="card__wildcard-swap" aria-hidden="true">
               <path d="M12 3 L8 8 H10.5 V16 H8 L12 21 L16 16 H13.5 V8 H16 Z" fill="#2c3e50" />
             </svg>
           </div>
-          <div className={`card__wildcard-band card__wildcard-band--bottom ${colorTextClass(c2)}`} style={getColorStyle(c2)}>
-            {size !== 'tiny' && colorLabel(c2)}
-          </div>
+          {half(c2, true)}
           <ValueBadge value={card.bankValue} />
         </div>
       );

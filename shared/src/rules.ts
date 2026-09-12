@@ -34,4 +34,7 @@ export const NORMAL_DRAW = 2;
 export const EMPTY_HAND_DRAW = 5;
 export const MAX_HAND_SIZE = 7;
 export const PLAYS_PER_TURN = 3;
-export const JSN_TIMEOUT_SECONDS = 30;
+/** Seconds a player has to respond to a Just Say No window or a payment before the server auto-resolves. */
+export const INTERACTION_TIMEOUT_SECONDS = 60;
+/** @deprecated use INTERACTION_TIMEOUT_SECONDS */
+export const JSN_TIMEOUT_SECONDS = INTERACTION_TIMEOUT_SECONDS;

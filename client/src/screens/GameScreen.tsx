@@ -3,11 +3,11 @@ import type {
   Card,
   Color,
   ActionCard,
-  RentCard,
-  WildcardCard,
-  RedactedGameView,
 } from '@monopoly-deal/shared';
 import type { SocketHook } from '../socket/useSocket.js';
+import { buildDeck } from '@monopoly-deal/shared';
+
+const FULL_CARD_MAP: Record<string, Card> = Object.fromEntries(buildDeck().map(c => [c.id, c]));
 
 import HandView from '../components/HandView.js';
 import PropertySetsView from '../components/PropertySetsView.js';
@@ -68,35 +68,10 @@ export default function GameScreen({ socket }: GameScreenProps) {
   const myHand = me?.hand ?? [];
   const decision = gameView.yourPendingDecision;
 
-  // Build a card map from all visible cards
-  const cardMap: Record<string, Card> = {};
-  for (const p of players) {
-    for (const c of p.bank) cardMap[c.id] = c;
-    if (p.hand) for (const c of p.hand) cardMap[c.id] = c;
-    for (const set of p.propertySets) {
-      for (const id of set.cards) {
-        // cards in property sets come from the view; we might not have the card object here
-        // The server sends card objects in bank and hand; for property sets we reconstruct from cardMap
-      }
-    }
-    if (discardTop) cardMap[discardTop.id] = discardTop;
-  }
-  // Also populate from the opponent views (bank cards are Card objects)
-  for (const p of players) {
-    for (const set of p.propertySets) {
-      // property set card objects aren't in the view; we attempt to map from bank/hand context
-      // The card objects for properties will be in hands or we need to track them
-      // For opponent property views, we store a placeholder
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Build an enhanced cardMap: opponents' property cards are sent as Card objects
-  // in their bank arrays; we need to also build from property sets.
-  // The server's RedactedPlayerView has bank: Card[] but property set cards
-  // are referenced by ID only. We need to find them somewhere.
-  // For now we use whatever cards we have in the map.
-  // ---------------------------------------------------------------------------
+  // Card IDs are deterministic (same 106-card deck every game), so every card
+  // on the table — including property-set cards, which the server sends as IDs
+  // only — can be resolved from the shared deck definition.
+  const cardMap = FULL_CARD_MAP;
 
   function handlePlayCard(card: Card, destination?: Color) {
     sendAction({ type: 'PLAY_PROPERTY', cardId: card.id, setColor: destination! });

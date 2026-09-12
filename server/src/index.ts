@@ -28,24 +28,25 @@ const io = new Server<ClientEvents, ServerEvents>(httpServer, {
 });
 
 // ---------------------------------------------------------------------------
-// Static serving in production
-// ---------------------------------------------------------------------------
-
-if (process.env['NODE_ENV'] === 'production') {
-  const clientDist = path.join(__dirname, '../../client/dist');
-  app.use(express.static(clientDist));
-  app.get('*', (_req, res) => {
-    res.sendFile(path.join(clientDist, 'index.html'));
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Health check
+// Health check (registered BEFORE the SPA catch-all so it is never shadowed)
 // ---------------------------------------------------------------------------
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
+
+// ---------------------------------------------------------------------------
+// Static serving in production
+// ---------------------------------------------------------------------------
+
+if (process.env['NODE_ENV'] === 'production') {
+  // Compiled file lives at server/dist/index.js → repo root is two levels up.
+  const clientDist = process.env['CLIENT_DIST'] ?? path.resolve(__dirname, '..', '..', 'client', 'dist');
+  app.use(express.static(clientDist));
+  app.get('*', (_req, res) => {
+    res.sendFile(path.join(clientDist, 'index.html'));
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Boot

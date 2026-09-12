@@ -96,13 +96,19 @@ function drawCards(
   return { drawn, newDeck: currentDeck, newDiscard: currentDiscard, newSeed: currentSeed };
 }
 
-/** Find or create a property set of the given color for a player. Returns new propertySets array. */
+/**
+ * Add a card to a property set of the given color. A player may own several
+ * sets of the same color: once a set is full, extra cards of that color start
+ * a new set (official rule). Returns new propertySets array.
+ */
 function addCardToPropertySet(
   propertySets: PropertySet[],
   color: Color,
   cardId: string
 ): PropertySet[] {
-  const idx = propertySets.findIndex(s => s.color === color);
+  const idx = propertySets.findIndex(
+    s => s.color === color && s.cards.length < SET_SIZES[color]
+  );
   if (idx !== -1) {
     // Add to existing set
     const existing = propertySets[idx]!;
@@ -155,28 +161,33 @@ function isSetComplete(
   cardMap: Record<string, Card>
 ): boolean {
   const required = SET_SIZES[set.color];
-  if (set.cards.length !== required) return false;
+  if (set.cards.length < required) return false;
   return standardCardCount(set, cardMap) > 0;
 }
 
-/** Get the rent value for a player's set of a given color. */
-function getRentValue(
-  player: PlayerState,
-  color: Color,
-  cardMap: Record<string, Card>
-): number {
-  const set = player.propertySets.find(s => s.color === color);
-  if (!set || set.cards.length === 0) return 0;
-
-  const ownedCount = set.cards.length;
-  const ladder = RENT_LADDERS[color];
-  const baseRent = ladder[Math.min(ownedCount, SET_SIZES[color]) - 1] ?? 0;
-
+/** Rent for a single set (base ladder value + building bonuses). */
+function rentForSet(set: PropertySet): number {
+  if (set.cards.length === 0) return 0;
+  const ladder = RENT_LADDERS[set.color];
+  const baseRent = ladder[Math.min(set.cards.length, SET_SIZES[set.color]) - 1] ?? 0;
   let bonus = 0;
   if (set.hasHouse) bonus += HOUSE_BONUS;
   if (set.hasHotel) bonus += HOTEL_BONUS;
-
   return baseRent + bonus;
+}
+
+/** Get the rent a player can charge for a color (highest-earning set of that color). */
+function getRentValue(
+  player: PlayerState,
+  color: Color,
+  _cardMap: Record<string, Card>
+): number {
+  let best = 0;
+  for (const set of player.propertySets) {
+    if (set.color !== color) continue;
+    best = Math.max(best, rentForSet(set));
+  }
+  return best;
 }
 
 /** Get card value for payment purposes ($0 for multi-color wildcards). */
@@ -223,10 +234,37 @@ function findCardSet(player: PlayerState, cardId: string): PropertySet | null {
  * Returns updated PlayerState.
  */
 function removeCardFromAllSets(player: PlayerState, cardId: string): PlayerState {
-  const newSets = player.propertySets
-    .map(s => ({ ...s, cards: s.cards.filter(id => id !== cardId) }))
-    .filter(s => s.cards.length > 0);
-  return { ...player, propertySets: newSets };
+  const newSets: PropertySet[] = [];
+  const orphanedBuildings: string[] = [];
+  for (const s of player.propertySets) {
+    if (!s.cards.includes(cardId)) {
+      newSets.push(s);
+      continue;
+    }
+    const cards = s.cards.filter(id => id !== cardId);
+    if (cards.length === 0) {
+      // Set is gone — any House/Hotel card on it goes to the owner's bank
+      // instead of silently disappearing from the game.
+      if (s.houseCardId) orphanedBuildings.push(s.houseCardId);
+      if (s.hotelCardId) orphanedBuildings.push(s.hotelCardId);
+      continue;
+    }
+    newSets.push({ ...s, cards });
+  }
+  return {
+    ...player,
+    propertySets: newSets,
+    bank: orphanedBuildings.length > 0 ? [...player.bank, ...orphanedBuildings] : player.bank,
+  };
+}
+
+/** Mark the game as won by `winnerId` (log + phase). */
+function declareWinner(state: GameState, winnerId: string, events: string[]): GameState {
+  const winner = state.players.find(p => p.id === winnerId)!;
+  const winEvent = `${winner.name} wins with ${COMPLETE_SETS_TO_WIN} complete property sets!`;
+  events.push(winEvent);
+  const logged = appendLog(state, winEvent);
+  return { ...logged, winnerId, phase: 'FINISHED' };
 }
 
 /** Check win condition: ≥ COMPLETE_SETS_TO_WIN complete sets of DIFFERENT colors. */
@@ -475,23 +513,23 @@ function executeResolvedAction(state: GameState, pi: PendingInteraction): GameSt
       // Execute the steal
       const initiator = state.players.find(p => p.id === pi.initiatorId)!;
       const targetPlayer = state.players.find(p => p.id === dbAction.targetId)!;
-      const targetSet = targetPlayer.propertySets.find(s => s.color === dbAction.setColor);
+      const targetSet = targetPlayer.propertySets.find(
+        s => s.color === dbAction.setColor && isSetComplete(s, state.cardMap)
+      );
       if (!targetSet) {
         return { ...state, phase: 'PLAYING', pendingInteraction: null };
       }
-      const stolenSet: PropertySet = { ...targetSet };
+      const stolenSet: PropertySet = { ...targetSet, cards: [...targetSet.cards] };
       const updatedTarget: PlayerState = {
         ...targetPlayer,
-        propertySets: targetPlayer.propertySets.filter(s => s.color !== dbAction.setColor),
+        propertySets: targetPlayer.propertySets.filter(s => s !== targetSet),
       };
-      const existingIdx = initiator.propertySets.findIndex(s => s.color === dbAction.setColor);
-      let newPlayerSets: PropertySet[];
-      if (existingIdx !== -1) {
-        newPlayerSets = initiator.propertySets.map(s => s.color === dbAction.setColor ? stolenSet : s);
-      } else {
-        newPlayerSets = [...initiator.propertySets, stolenSet];
-      }
-      const updatedInitiator: PlayerState = { ...initiator, propertySets: newPlayerSets };
+      // The stolen set is always kept as its own set — never merged into (or
+      // replacing) a set the initiator already owns of that color.
+      const updatedInitiator: PlayerState = {
+        ...initiator,
+        propertySets: [...initiator.propertySets, stolenSet],
+      };
       let newState = replacePlayer(state, updatedInitiator);
       newState = replacePlayer(newState, updatedTarget);
       newState = { ...newState, phase: 'PLAYING', pendingInteraction: null };
@@ -783,9 +821,11 @@ export function applyAction(
         return err(`Card ${cardId} is not a wildcard`);
       }
 
-      // Verify card is in the fromSetColor set
-      const fromSet = player.propertySets.find(s => s.color === fromSetColor);
-      if (!fromSet || !fromSet.cards.includes(cardId)) {
+      // Verify card is in one of the player's fromSetColor sets
+      const fromSet = player.propertySets.find(
+        s => s.color === fromSetColor && s.cards.includes(cardId)
+      );
+      if (!fromSet) {
         return err(`Card ${cardId} is not in your ${fromSetColor} set`);
       }
 
@@ -895,9 +935,13 @@ export function applyAction(
         return err('It is not your turn');
       }
 
-      // Player must discard if hand > MAX_HAND_SIZE
+      // Player must discard down to MAX_HAND_SIZE before the turn can end
       if (player.hand.length > MAX_HAND_SIZE) {
-        return err(`Must discard to ${MAX_HAND_SIZE} before ending turn (have ${player.hand.length})`);
+        const discardEvent = `${player.name} must discard down to ${MAX_HAND_SIZE} cards`;
+        events.push(discardEvent);
+        let discardState = appendLog(state, discardEvent);
+        discardState = { ...discardState, phase: 'AWAITING_DISCARD' };
+        return { state: discardState, events };
       }
 
       const event = `${player.name} ended their turn`;
@@ -979,8 +1023,8 @@ export function applyAction(
       const rentCard = card as import('@monopoly-deal/shared').RentCard;
 
       // Validate chosenColor: player must own at least one card of that color
-      const playerSet = player.propertySets.find(s => s.color === chosenColor);
-      if (!playerSet || playerSet.cards.length === 0) {
+      const ownsColor = player.propertySets.some(s => s.color === chosenColor && s.cards.length > 0);
+      if (!ownsColor) {
         return err(`You don't own any ${chosenColor} properties`);
       }
 
@@ -1275,6 +1319,12 @@ export function applyAction(
       newState = replacePlayer(newState, updatedRecipient);
       newState = appendLog(newState, event);
 
+      // Receiving property can complete the recipient's 3rd set → immediate win
+      if (checkWin(updatedRecipient, newState.cardMap)) {
+        newState = declareWinner({ ...newState, pendingInteraction: null }, updatedRecipient.id, events);
+        return { state: newState, events };
+      }
+
       // Check if all debts are paid
       const allPaid = updatedDebts.every(d => d.paid);
 
@@ -1457,11 +1507,11 @@ export function applyAction(
       if (!targetPlayer) return err(`Unknown target player: ${targetId}`);
 
       // Target must have a complete set of setColor
-      const targetSet = targetPlayer.propertySets.find(s => s.color === setColor);
-      if (!targetSet) {
+      const colorSets = targetPlayer.propertySets.filter(s => s.color === setColor);
+      if (colorSets.length === 0) {
         return err(`${targetPlayer.name} doesn't have a ${setColor} set`);
       }
-      if (!isSetComplete(targetSet, state.cardMap)) {
+      if (!colorSets.some(s => isSetComplete(s, state.cardMap))) {
         return err(`${targetPlayer.name}'s ${setColor} set is not complete`);
       }
 
@@ -1513,14 +1563,15 @@ export function applyAction(
         return err(`Cannot place a House on a ${setColor} set`);
       }
 
-      // Must be a complete set
-      const targetSet = player.propertySets.find(s => s.color === setColor);
-      if (!targetSet || !isSetComplete(targetSet, state.cardMap)) {
+      // Must be a complete set (first complete set of that color without a House)
+      const completeSets = player.propertySets.filter(
+        s => s.color === setColor && isSetComplete(s, state.cardMap)
+      );
+      if (completeSets.length === 0) {
         return err(`Your ${setColor} set is not complete`);
       }
-
-      // Set must not already have a house
-      if (targetSet.hasHouse) {
+      const targetSet = completeSets.find(s => !s.hasHouse);
+      if (!targetSet) {
         return err(`Your ${setColor} set already has a House`);
       }
 
@@ -1530,7 +1581,7 @@ export function applyAction(
         ...player,
         hand: player.hand.filter(id => id !== cardId),
         propertySets: player.propertySets.map(s =>
-          s.color === setColor
+          s === targetSet
             ? { ...s, hasHouse: true, houseCardId: cardId }
             : s
         ),
@@ -1573,19 +1624,19 @@ export function applyAction(
         return err(`Cannot place a Hotel on a ${setColor} set`);
       }
 
-      // Must be a complete set
-      const targetSet = player.propertySets.find(s => s.color === setColor);
-      if (!targetSet || !isSetComplete(targetSet, state.cardMap)) {
+      // Must be a complete set with a House but no Hotel yet
+      const completeSets = player.propertySets.filter(
+        s => s.color === setColor && isSetComplete(s, state.cardMap)
+      );
+      if (completeSets.length === 0) {
         return err(`Your ${setColor} set is not complete`);
       }
-
-      // Must have a house first
-      if (!targetSet.hasHouse) {
+      const withHouse = completeSets.filter(s => s.hasHouse);
+      if (withHouse.length === 0) {
         return err(`Your ${setColor} set must have a House before adding a Hotel`);
       }
-
-      // Set must not already have a hotel
-      if (targetSet.hasHotel) {
+      const targetSet = withHouse.find(s => !s.hasHotel);
+      if (!targetSet) {
         return err(`Your ${setColor} set already has a Hotel`);
       }
 
@@ -1595,7 +1646,7 @@ export function applyAction(
         ...player,
         hand: player.hand.filter(id => id !== cardId),
         propertySets: player.propertySets.map(s =>
-          s.color === setColor
+          s === targetSet
             ? { ...s, hasHotel: true, hotelCardId: cardId }
             : s
         ),
