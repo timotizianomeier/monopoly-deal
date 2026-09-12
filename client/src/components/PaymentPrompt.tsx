@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import type { PendingInteraction, Card, RedactedPlayerView, PropertySet } from '@monopoly-deal/shared';
 import type { GameAction } from '@monopoly-deal/shared';
 import CardView from './CardView.js';
@@ -23,6 +23,15 @@ export default function PaymentPrompt({
   sendAction,
 }: PaymentPromptProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!interaction.expiresAt) { setSecondsLeft(null); return; }
+    const tick = () => setSecondsLeft(Math.max(0, Math.ceil((interaction.expiresAt! - Date.now()) / 1000)));
+    tick();
+    const id = setInterval(tick, 500);
+    return () => clearInterval(id);
+  }, [interaction.expiresAt]);
 
   const myDebt = interaction.debts.find(d => d.debtorId === myPlayerId);
   if (!myDebt || myDebt.paid) return null;
@@ -30,16 +39,21 @@ export default function PaymentPrompt({
   const amountOwed = myDebt.amountOwed;
   const recipientName = players.find(p => p.id === interaction.recipientId)?.name ?? 'the bank';
 
-  // All property cards I can use for payment
+  // Property cards I can use for payment ($0 multi-color wildcards are never accepted)
   const myPropertyCards: Card[] = [];
+  const myBuildingCards: Card[] = [];
   for (const set of myPropertySets) {
     for (const cardId of set.cards) {
       const card = cardMap[cardId];
-      if (card) myPropertyCards.push(card);
+      if (card && !(card.type === 'wildcard' && card.isMultiColor)) myPropertyCards.push(card);
+    }
+    for (const id of [set.houseCardId, set.hotelCardId]) {
+      const card = id ? cardMap[id] : undefined;
+      if (card) myBuildingCards.push(card);
     }
   }
 
-  const allPaymentCards = [...myBank, ...myPropertyCards];
+  const allPaymentCards = [...myBank, ...myBuildingCards, ...myPropertyCards];
   const totalAssets = allPaymentCards.reduce((s, c) => s + c.bankValue, 0);
 
   const selectedTotal = useMemo(() => {
@@ -80,6 +94,11 @@ export default function PaymentPrompt({
           <p className="payment-prompt__debt">
             You owe <strong>${amountOwed}M</strong> to <strong>{recipientName}</strong>
           </p>
+          {secondsLeft !== null && (
+            <p className="payment-prompt__timer">
+              {secondsLeft}s left — after that the cheapest sufficient cards are paid automatically
+            </p>
+          )}
 
           {cantCover && (
             <div className="payment-prompt__alert payment-prompt__alert--warning">
@@ -110,13 +129,13 @@ export default function PaymentPrompt({
                 </div>
               </div>
 
-              {myPropertyCards.length > 0 && (
+              {[...myBuildingCards, ...myPropertyCards].length > 0 && (
                 <div className="payment-prompt__section">
                   <div className="payment-prompt__section-header">
-                    <span>Properties</span>
+                    <span>Properties &amp; buildings</span>
                   </div>
                   <div className="payment-prompt__cards">
-                    {myPropertyCards.map(card => (
+                    {[...myBuildingCards, ...myPropertyCards].map(card => (
                       <label key={card.id} className={['payment-prompt__card-item', selectedIds.has(card.id) ? 'payment-prompt__card-item--selected' : ''].join(' ')}>
                         <input
                           type="checkbox"

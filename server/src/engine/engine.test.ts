@@ -368,7 +368,7 @@ describe('Engine core', () => {
   });
 
   // 8. END_TURN with >7 cards is rejected
-  it('END_TURN is rejected when player has more than 7 cards', () => {
+  it('END_TURN with more than 7 cards moves the player into the discard phase', () => {
     const initial = createGame(TWO_PLAYERS, SEED);
     const { state: playing } = startTurn(initial, 'p1');
 
@@ -386,9 +386,11 @@ describe('Engine core', () => {
     };
     expect(bloatedState.players[0].hand.length).toBe(8);
 
-    const { error } = applyAction(bloatedState, 'p1', { type: 'END_TURN' });
-    expect(error).toBeDefined();
-    expect(error).toMatch(/discard/i);
+    const { state: afterEnd, error } = applyAction(bloatedState, 'p1', { type: 'END_TURN' });
+    expect(error).toBeUndefined();
+    expect(afterEnd.phase).toBe('AWAITING_DISCARD');
+    // Turn has NOT advanced yet — p1 must discard first
+    expect(afterEnd.currentPlayerIndex).toBe(0);
   });
 
   // 9. DISCARD reduces hand to exactly ≤ 7
@@ -2108,5 +2110,200 @@ describe('JSN interaction', () => {
     // Now p1 is in awaitingJsnFrom
     const view = getRedactedView(afterJsn, 'p1');
     expect(view.yourPendingDecision?.type).toBe('respondJSN');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Regression tests from the 2026-09 rules audit
+// ---------------------------------------------------------------------------
+
+describe('Rules audit regressions', () => {
+  function audSetup(): GameState {
+    return createGame([{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }], 42);
+  }
+  function audIds(state: GameState, prefix: string): string[] {
+    return Object.keys(state.cardMap).filter(id => id.startsWith(prefix));
+  }
+  /** Give `pid` exactly this hand; pulls the cards out of the deck/other hands. */
+  function audHand(state: GameState, pid: string, hand: string[]): GameState {
+    const taken = new Set(hand);
+    return {
+      ...state,
+      deck: state.deck.filter(id => !taken.has(id)),
+      players: state.players.map(p => p.id === pid
+        ? { ...p, hand }
+        : { ...p, hand: p.hand.filter(id => !taken.has(id)) }),
+    };
+  }
+  function audSets(state: GameState, pid: string, sets: Array<Partial<PropertySet> & { color: PropertySet['color']; cards: string[] }>): GameState {
+    const taken = new Set(sets.flatMap(s => [...s.cards, s.houseCardId ?? '', s.hotelCardId ?? '']));
+    return {
+      ...state,
+      deck: state.deck.filter(id => !taken.has(id)),
+      players: state.players.map(p => p.id === pid
+        ? { ...p, propertySets: sets.map(s => ({ hasHouse: !!s.houseCardId, hasHotel: !!s.hotelCardId, ...s })) }
+        : { ...p, hand: p.hand.filter(id => !taken.has(id)) }),
+    };
+  }
+  function audBank(state: GameState, pid: string, bank: string[]): GameState {
+    const taken = new Set(bank);
+    return {
+      ...state,
+      deck: state.deck.filter(id => !taken.has(id)),
+      players: state.players.map(p => p.id === pid ? { ...p, bank } : { ...p, hand: p.hand.filter(id => !taken.has(id)) }),
+    };
+  }
+  function audPlaying(state: GameState): GameState {
+    return { ...state, phase: 'PLAYING', playsRemaining: 3, currentPlayerIndex: 0 };
+  }
+  function audAllCardIds(state: GameState): string[] {
+    const out: string[] = [...state.deck, ...state.discard];
+    for (const p of state.players) {
+      out.push(...p.hand, ...p.bank);
+      for (const s of p.propertySets) {
+        out.push(...s.cards);
+        if (s.houseCardId) out.push(s.houseCardId);
+        if (s.hotelCardId) out.push(s.hotelCardId);
+      }
+    }
+    return out;
+  }
+
+  it('Deal Breaker keeps my existing same-color set as a separate set (no card leak)', () => {
+    let s = audPlaying(audSetup());
+    const reds = audIds(s, 'property_red_');
+    const db = audIds(s, 'action_dealBreaker_')[0]!;
+    const wildRY = audIds(s, 'wildcard_red_yellow_')[0]!;
+    s = audHand(s, 'a', [db]);
+    s = audSets(s, 'b', [{ color: 'red', cards: reds }]);
+    s = audSets(s, 'a', [{ color: 'red', cards: [wildRY] }]);
+    const before = audAllCardIds(s).length;
+    let r = applyAction(s, 'a', { type: 'PLAY_DEAL_BREAKER', cardId: db, targetId: 'b', setColor: 'red' });
+    expect(r.error).toBeUndefined();
+    r = applyAction(r.state, 'b', { type: 'RESPOND_ALLOW' });
+    expect(r.error).toBeUndefined();
+    expect(audAllCardIds(r.state).length).toBe(before);
+    const aRed = r.state.players[0]!.propertySets.filter(x => x.color === 'red');
+    expect(aRed).toHaveLength(2);
+    expect(aRed.flatMap(x => x.cards)).toEqual(expect.arrayContaining([wildRY, ...reds]));
+  });
+
+  it('a 4th card of a completed color starts a new set; the complete set stays complete', () => {
+    let s = audPlaying(audSetup());
+    const reds = audIds(s, 'property_red_');
+    const wildRY = audIds(s, 'wildcard_red_yellow_')[0]!;
+    const house = audIds(s, 'action_house_')[0]!;
+    s = audSets(s, 'a', [{ color: 'red', cards: reds }]);
+    s = audHand(s, 'a', [wildRY, house]);
+    let r = applyAction(s, 'a', { type: 'PLAY_PROPERTY', cardId: wildRY, setColor: 'red' });
+    expect(r.error).toBeUndefined();
+    const redSets = r.state.players[0]!.propertySets.filter(x => x.color === 'red');
+    expect(redSets.map(x => x.cards.length)).toEqual([3, 1]);
+    r = applyAction(r.state, 'a', { type: 'PLAY_HOUSE', cardId: house, setColor: 'red' });
+    expect(r.error).toBeUndefined();
+    expect(r.state.players[0]!.propertySets.find(x => x.color === 'red' && x.cards.length === 3)!.hasHouse).toBe(true);
+  });
+
+  it('a property received as payment never breaks the recipient’s complete set', () => {
+    let s = audPlaying(audSetup());
+    const reds = audIds(s, 'property_red_');
+    const wildRY = audIds(s, 'wildcard_red_yellow_')[0]!;
+    const rent = audIds(s, 'rent_red_yellow_')[0]!;
+    s = audSets(s, 'a', [{ color: 'red', cards: reds }]);
+    s = audSets(s, 'b', [{ color: 'red', cards: [wildRY] }]);
+    s = audHand(s, 'a', [rent]);
+    let r = applyAction(s, 'a', { type: 'PLAY_RENT', cardId: rent, chosenColor: 'red' });
+    r = applyAction(r.state, 'b', { type: 'RESPOND_ALLOW' });
+    r = applyAction(r.state, 'b', { type: 'PAY', cardIds: [wildRY] });
+    expect(r.error).toBeUndefined();
+    const redSets = r.state.players[0]!.propertySets.filter(x => x.color === 'red');
+    expect(redSets.map(x => x.cards.length).sort()).toEqual([1, 3]);
+  });
+
+  it('rent for a color uses the best set when a player owns several', () => {
+    let s = audPlaying(audSetup());
+    const reds = audIds(s, 'property_red_');
+    const wildRY = audIds(s, 'wildcard_red_yellow_')[0]!;
+    const rent = audIds(s, 'rent_red_yellow_')[0]!;
+    s = audSets(s, 'a', [{ color: 'red', cards: [wildRY] }, { color: 'red', cards: reds }]);
+    s = audHand(s, 'a', [rent]);
+    let r = applyAction(s, 'a', { type: 'PLAY_RENT', cardId: rent, chosenColor: 'red' });
+    r = applyAction(r.state, 'b', { type: 'RESPOND_ALLOW' });
+    expect(r.state.pendingInteraction!.debts[0]!.amountOwed).toBe(RENT_LADDERS.red[2]);
+  });
+
+  it('a payment that completes the recipient’s 3rd set wins immediately', () => {
+    let s = audPlaying(audSetup());
+    const browns = audIds(s, 'property_brown_');
+    const blues = audIds(s, 'property_darkBlue_');
+    const utils = audIds(s, 'property_utility_');
+    s = audSets(s, 'a', [{ color: 'brown', cards: browns }, { color: 'darkBlue', cards: blues }, { color: 'utility', cards: [utils[0]!] }]);
+    s = audSets(s, 'b', [{ color: 'utility', cards: [utils[1]!] }]);
+    const dc = audIds(s, 'action_debtCollector_')[0]!;
+    s = audHand(s, 'a', [dc]);
+    let r = applyAction(s, 'a', { type: 'PLAY_DEBT_COLLECTOR', cardId: dc, targetId: 'b' });
+    r = applyAction(r.state, 'b', { type: 'RESPOND_ALLOW' });
+    r = applyAction(r.state, 'b', { type: 'PAY', cardIds: [utils[1]!] });
+    expect(r.error).toBeUndefined();
+    expect(r.state.winnerId).toBe('a');
+    expect(r.state.phase).toBe('FINISHED');
+  });
+
+  it('END_TURN with more than 7 cards enters the discard phase and DISCARD then advances the turn', () => {
+    let s = audPlaying(audSetup());
+    const nine = [...audIds(s, 'action_justSayNo_'), ...audIds(s, 'action_doubleTheRent_'), ...audIds(s, 'money_1m_').slice(0, 4)];
+    s = audHand(s, 'a', nine);
+    let r = applyAction(s, 'a', { type: 'END_TURN' });
+    expect(r.error).toBeUndefined();
+    expect(r.state.phase).toBe('AWAITING_DISCARD');
+    r = applyAction(r.state, 'a', { type: 'DISCARD', cardIds: nine.slice(0, 2) });
+    expect(r.error).toBeUndefined();
+    expect(r.state.currentPlayerIndex).toBe(1);
+    expect(r.state.phase).toBe('AWAITING_TURN_START');
+  });
+
+  it('Just Say No and Double the Rent can be banked as money', () => {
+    let s = audPlaying(audSetup());
+    const jsn = audIds(s, 'action_justSayNo_')[0]!;
+    const dtr = audIds(s, 'action_doubleTheRent_')[0]!;
+    s = audHand(s, 'a', [jsn, dtr]);
+    let r = applyAction(s, 'a', { type: 'PLAY_MONEY', cardId: jsn });
+    expect(r.error).toBeUndefined();
+    r = applyAction(r.state, 'a', { type: 'PLAY_MONEY', cardId: dtr });
+    expect(r.error).toBeUndefined();
+    expect(r.state.players[0]!.bank).toEqual([jsn, dtr]);
+  });
+
+  it('a House/Hotel card is not lost when its set is fully paid away', () => {
+    let s = audPlaying(audSetup());
+    const browns = audIds(s, 'property_brown_');
+    const house = audIds(s, 'action_house_')[0]!;
+    s = audSets(s, 'b', [{ color: 'brown', cards: browns, houseCardId: house }]);
+    const bday = audIds(s, 'action_birthday_')[0]!;
+    s = audHand(s, 'a', [bday]);
+    const before = audAllCardIds(s).length;
+    let r = applyAction(s, 'a', { type: 'PLAY_BIRTHDAY', cardId: bday });
+    r = applyAction(r.state, 'b', { type: 'RESPOND_ALLOW' });
+    // $2M owed, paid with the two $1M browns → the set empties but the House must survive
+    r = applyAction(r.state, 'b', { type: 'PAY', cardIds: browns });
+    expect(r.error).toBeUndefined();
+    expect(audAllCardIds(r.state).length).toBe(before);
+    expect(r.state.players[1]!.bank).toContain(house);
+  });
+
+  it('MOVE_WILDCARD finds the wildcard in the second set of a color', () => {
+    let s = audPlaying(audSetup());
+    const reds = audIds(s, 'property_red_');
+    const wildRY = audIds(s, 'wildcard_red_yellow_')[0]!;
+    s = audSets(s, 'a', [{ color: 'red', cards: reds }, { color: 'red', cards: [wildRY] }]);
+    const r = applyAction(s, 'a', { type: 'MOVE_WILDCARD', cardId: wildRY, fromSetColor: 'red', toSetColor: 'yellow' });
+    expect(r.error).toBeUndefined();
+    expect(r.state.players[0]!.propertySets.find(x => x.color === 'yellow')!.cards).toEqual([wildRY]);
+    expect(r.state.players[0]!.propertySets.filter(x => x.color === 'red')).toHaveLength(1);
+  });
+
+  it('Light Blue / Railroad wildcard is worth $4M', () => {
+    const s = audSetup();
+    expect(s.cardMap[audIds(s, 'wildcard_lightBlue_railroad_')[0]!]!.bankValue).toBe(4);
   });
 });

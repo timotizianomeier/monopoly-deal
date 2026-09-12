@@ -4,7 +4,7 @@ A real-time, browser-based implementation of the Monopoly Deal card game for 2â€
 
 ## Features
 
-- Full Monopoly Deal rules (all action cards, Just Say No chains, rent, houses/hotels)
+- Full Monopoly Deal rules (all action cards, Just Say No chains, rent, houses/hotels, multiple sets per color)
 - Real-time multiplayer via Socket.IO rooms
 - Original-deck-style card design with hand-drawn SVG art
 - Hand privacy â€” each player only sees their own cards
@@ -20,9 +20,12 @@ A real-time, browser-based implementation of the Monopoly Deal card game for 2â€
 # Install all workspaces
 npm install
 
+# Build the shared package once (server dev + type-checking resolve it from shared/dist)
+npm run build --workspace=shared
+
 # Run server + client in watch mode (two terminals)
 npm run dev --workspace=server   # http://localhost:3001
-npm run dev --workspace=client   # http://localhost:5173
+npm run dev --workspace=client   # http://localhost:3000
 
 # Run all tests
 npm test --workspace=server
@@ -39,6 +42,7 @@ npm run build --workspace=shared
 npm run build --workspace=server
 npm run build --workspace=client
 # Server serves the built client from client/dist/ when NODE_ENV=production
+# (override the client folder with CLIENT_DIST=/path/to/client/dist if you move it)
 node server/dist/index.js
 ```
 
@@ -100,6 +104,11 @@ monopoly-deal/
 ## Rules Reference
 
 - Each player starts with 5 cards; draw 2 at the start of each turn (draw 5 if empty hand).
+- Any action card may be banked as money. Property cards can never be banked.
+- Extra properties of a color you already completed start a new set of that color.
+- Payments come only from the table (bank, properties, houses/hotels); no change is given; $0 multi-color wildcards cannot pay.
+- Winning is checked immediately, including when a payment or steal completes your 3rd set.
+- If you do not respond to a Just Say No window or a payment within 60 s, the server allows / auto-pays with the cheapest sufficient cards.
 - Play up to 3 cards per turn (money to bank counts as 1 play; moving a wildcard is free).
 - First player to complete **3 full property sets** wins.
 - Just Say No cards can block any action card â€” and can themselves be blocked by another Just Say No.

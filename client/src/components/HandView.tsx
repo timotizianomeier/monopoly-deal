@@ -22,8 +22,15 @@ function getPropertyColors(card: Card): Color[] {
 }
 
 function isActionBankable(card: Card): boolean {
-  // All non-JSN action cards can be banked; JSN cannot be played during own turn for banking
-  return card.type !== 'action' || (card as ActionCard).action !== 'justSayNo';
+  // Every action card may be placed in the bank as money (official rule).
+  return card.type === 'action' || card.type === 'rent';
+}
+
+/** Cards that have no stand-alone "play" from hand during your turn. */
+function isPlayableFromHand(card: Card): boolean {
+  if (card.type !== 'action') return true;
+  const a = (card as ActionCard).action;
+  return a !== 'justSayNo' && a !== 'doubleTheRent';
 }
 
 export default function HandView({
@@ -104,12 +111,13 @@ export default function HandView({
     <div className="hand-view">
       <div className="hand-view__cards">
         {cards.map(card => {
-          const isDisabled = !canPlay || card.type === 'action' && (card as ActionCard).action === 'doubleTheRent' || card.type === 'action' && (card as ActionCard).action === 'justSayNo';
+          const isDisabled = !canPlay;
+          const playable = isPlayableFromHand(card);
           return (
             <div key={card.id} className="hand-view__card-wrapper">
               <CardView
                 card={card}
-                onClick={() => handleCardClick(card)}
+                onClick={() => (playable ? handleCardClick(card) : onBankCard(card))}
                 disabled={isDisabled}
               />
               {canPlay && !isDisabled && (
@@ -124,11 +132,13 @@ export default function HandView({
                       Play
                     </button>
                   )}
-                  {(card.type === 'rent' || (card.type === 'action' && isActionBankable(card))) && (
+                  {isActionBankable(card) && (
                     <>
-                      <button className="btn btn--tiny" onClick={() => handleCardClick(card)}>
-                        Play
-                      </button>
+                      {playable && (
+                        <button className="btn btn--tiny" onClick={() => handleCardClick(card)}>
+                          Play
+                        </button>
+                      )}
                       <button className="btn btn--tiny btn--secondary" onClick={() => onBankCard(card)}>
                         Bank
                       </button>
@@ -137,10 +147,10 @@ export default function HandView({
                 </div>
               )}
               {card.type === 'action' && (card as ActionCard).action === 'doubleTheRent' && (
-                <div className="hand-view__card-hint">Use with rent</div>
+                <div className="hand-view__card-hint">Use with rent, or bank</div>
               )}
               {card.type === 'action' && (card as ActionCard).action === 'justSayNo' && (
-                <div className="hand-view__card-hint">Counter action</div>
+                <div className="hand-view__card-hint">Counter action, or bank</div>
               )}
             </div>
           );

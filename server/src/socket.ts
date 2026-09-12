@@ -15,8 +15,9 @@
  */
 
 import type { Server, Socket } from 'socket.io';
-import type { ClientEvents, ServerEvents, GameAction, ScoreEntry } from '@monopoly-deal/shared';
+import type { ClientEvents, ServerEvents, GameAction, ScoreEntry, Card, PlayerState } from '@monopoly-deal/shared';
 import type { GameState } from '@monopoly-deal/shared';
+import { INTERACTION_TIMEOUT_SECONDS } from '@monopoly-deal/shared';
 import {
   createRoom,
   joinRoom,
@@ -94,7 +95,7 @@ function sendError(
 // Interaction timeout handling
 // ---------------------------------------------------------------------------
 
-const INTERACTION_TIMEOUT_MS = 30_000;
+const INTERACTION_TIMEOUT_MS = INTERACTION_TIMEOUT_SECONDS * 1000;
 
 /**
  * Schedule an auto-resolution for the current pending interaction.
@@ -110,6 +111,17 @@ function scheduleInteractionTimeout(
   const phase = room.gameState?.phase;
 
   if (phase !== 'AWAITING_RESPONSES' && phase !== 'AWAITING_PAYMENT') return;
+
+  // Stamp the deadline on the interaction so clients can show a countdown.
+  if (room.gameState?.pendingInteraction) {
+    room.gameState = {
+      ...room.gameState,
+      pendingInteraction: {
+        ...room.gameState.pendingInteraction,
+        expiresAt: Date.now() + INTERACTION_TIMEOUT_MS,
+      },
+    };
+  }
 
   const timer = setTimeout(() => {
     interactionTimers.delete(code);
@@ -127,18 +139,9 @@ function scheduleInteractionTimeout(
         if (!result.error) current = result.state;
       }
       currentRoom.gameState = current;
-      broadcastGameViews(io, currentRoom);
-      broadcastRoomState(io, currentRoom);
-      if (current.winnerId) {
-        handleGameOver(io, currentRoom, current);
-      } else if (
-        current.phase === 'AWAITING_RESPONSES' ||
-        current.phase === 'AWAITING_PAYMENT'
-      ) {
-        scheduleInteractionTimeout(io, currentRoom);
-      }
+      finishTimeoutStep(io, currentRoom, current);
     } else if (state.phase === 'AWAITING_PAYMENT') {
-      // Auto-pay for every debtor with all their available cards
+      // Auto-pay for every debtor with the cheapest sufficient selection
       const debts = state.pendingInteraction?.debts ?? [];
       let current = state;
       for (const debt of debts) {
@@ -146,29 +149,86 @@ function scheduleInteractionTimeout(
         const debtor = current.players.find(p => p.id === debt.debtorId);
         if (!debtor) continue;
 
-        // Collect all payable card IDs: bank + all property cards
-        const allCards: string[] = [
-          ...debtor.bank,
-          ...debtor.propertySets.flatMap(s => s.cards),
-        ];
-        const result = applyAction(current, debt.debtorId, { type: 'PAY', cardIds: allCards });
-        if (!result.error) current = result.state;
+        const cardIds = chooseAutoPayment(debtor, debt.amountOwed, current.cardMap);
+        const result = applyAction(current, debt.debtorId, { type: 'PAY', cardIds });
+        if (!result.error) {
+          current = result.state;
+        } else {
+          console.warn(`[${code}] auto-pay failed for ${debtor.name}: ${result.error}`);
+        }
       }
       currentRoom.gameState = current;
-      broadcastGameViews(io, currentRoom);
-      broadcastRoomState(io, currentRoom);
-      if (current.winnerId) {
-        handleGameOver(io, currentRoom, current);
-      } else if (
-        current.phase === 'AWAITING_RESPONSES' ||
-        current.phase === 'AWAITING_PAYMENT'
-      ) {
-        scheduleInteractionTimeout(io, currentRoom);
-      }
+      finishTimeoutStep(io, currentRoom, current);
     }
   }, INTERACTION_TIMEOUT_MS);
 
   interactionTimers.set(code, timer);
+}
+
+/** After a timeout auto-resolution: re-arm the timer if still waiting, then broadcast. */
+function finishTimeoutStep(
+  io: Server<ClientEvents, ServerEvents>,
+  room: Room,
+  state: GameState
+): void {
+  if (!state.winnerId && (state.phase === 'AWAITING_RESPONSES' || state.phase === 'AWAITING_PAYMENT')) {
+    scheduleInteractionTimeout(io, room);
+  }
+  broadcastGameViews(io, room);
+  broadcastRoomState(io, room);
+  if (state.winnerId) handleGameOver(io, room, state);
+}
+
+/**
+ * Pick cards for an automatic payment (used when a debtor does not respond).
+ * Priority: bank cards, then House/Hotel cards, then property cards. Within
+ * the bank the cheapest sufficient combination is preferred so the player is
+ * not stripped of everything because they were slow. Multi-color wildcards
+ * ($0) are never used. If total assets are below the debt, everything usable
+ * is paid (official rule).
+ */
+export function chooseAutoPayment(
+  debtor: PlayerState,
+  amount: number,
+  cardMap: Record<string, Card>
+): string[] {
+  const value = (id: string): number => {
+    const c = cardMap[id];
+    if (!c) return 0;
+    if (c.type === 'wildcard' && c.isMultiColor) return 0;
+    return c.bankValue;
+  };
+  const usable = (id: string): boolean => {
+    const c = cardMap[id];
+    return !!c && !(c.type === 'wildcard' && c.isMultiColor);
+  };
+  const byValue = (a: string, b: string) => value(a) - value(b);
+
+  const bank = debtor.bank.filter(usable).sort(byValue);
+  const buildings = debtor.propertySets
+    .flatMap(s => [s.houseCardId, s.hotelCardId])
+    .filter((id): id is string => !!id && usable(id))
+    .sort(byValue);
+  const properties = debtor.propertySets
+    .flatMap(s => s.cards)
+    .filter(usable)
+    .sort(byValue);
+
+  const total = [...bank, ...buildings, ...properties].reduce((sum, id) => sum + value(id), 0);
+  if (total <= amount) return [...bank, ...buildings, ...properties];
+
+  // Option A: greedy ascending through bank → buildings → properties
+  const greedy: string[] = [];
+  let sum = 0;
+  for (const id of [...bank, ...buildings, ...properties]) {
+    if (sum >= amount) break;
+    greedy.push(id);
+    sum += value(id);
+  }
+  // Option B: the single cheapest bank card that covers the debt on its own
+  const single = bank.find(id => value(id) >= amount);
+  if (single && value(single) <= sum) return [single];
+  return greedy;
 }
 
 function clearInteractionTimeout(roomCode: string): void {
@@ -252,17 +312,13 @@ export function setupSocketHandlers(io: Server<ClientEvents, ServerEvents>): voi
       if (!roomCode || typeof roomCode !== 'string') {
         return cb({ error: 'Room code is required' });
       }
-      if (!name || typeof name !== 'string' || name.trim().length === 0) {
-        return cb({ error: 'Name must not be empty' });
-      }
-
-      const trimmedName = name.trim().slice(0, 20);
       const upperCode = roomCode.toUpperCase();
       const room = getRoomByCode(upperCode);
       if (!room) return cb({ error: 'Room not found' });
 
-      // ── Reconnection path ──────────────────────────────────────────
-      // Client supplies the playerId they had from a previous session.
+      // ── Reconnection path (checked BEFORE name validation) ────────────
+      // A client that reloads the page only has its stored playerId + room
+      // code; it must be able to resume its seat without retyping a name.
       if (providedPlayerId && room.players.has(providedPlayerId)) {
         const existing = room.players.get(providedPlayerId)!;
         reconnectPlayer(upperCode, providedPlayerId, socket.id);
@@ -278,6 +334,11 @@ export function setupSocketHandlers(io: Server<ClientEvents, ServerEvents>): voi
         }
         return cb({ playerId: providedPlayerId });
       }
+
+      if (!name || typeof name !== 'string' || name.trim().length === 0) {
+        return cb({ error: 'Name must not be empty' });
+      }
+      const trimmedName = name.trim().slice(0, 20);
 
       // ── Name-based reconnect for in-progress games ─────────────────
       if (room.gameState) {
@@ -402,18 +463,19 @@ export function setupSocketHandlers(io: Server<ClientEvents, ServerEvents>): voi
         io.to(room.code).emit('game:event', { message, ts: Date.now() });
       }
 
+      // Schedule a timeout if we are now in a response/payment phase
+      // (this also stamps expiresAt on the pending interaction, so it must
+      // happen before the views are sent)
+      if (!result.state.winnerId && (nowPhase === 'AWAITING_RESPONSES' || nowPhase === 'AWAITING_PAYMENT')) {
+        scheduleInteractionTimeout(io, room);
+      }
+
       // Send per-player redacted views
       broadcastGameViews(io, room);
 
       // Check for game over
       if (result.state.winnerId) {
         handleGameOver(io, room, result.state);
-        return;
-      }
-
-      // Schedule a timeout if we are now in a response/payment phase
-      if (nowPhase === 'AWAITING_RESPONSES' || nowPhase === 'AWAITING_PAYMENT') {
-        scheduleInteractionTimeout(io, room);
       }
     });
 

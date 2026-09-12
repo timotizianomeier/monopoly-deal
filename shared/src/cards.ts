@@ -127,7 +127,7 @@ const ALL_COLORS: Color[] = [
 
 const WILDCARD_DEFS: WildcardDef[] = [
   { colors: ['lightBlue', 'brown'],    bankValue: 1, isMultiColor: false, count: 1 },
-  { colors: ['lightBlue', 'railroad'], bankValue: 2, isMultiColor: false, count: 1 },
+  { colors: ['lightBlue', 'railroad'], bankValue: 4, isMultiColor: false, count: 1 },
   { colors: ['pink', 'orange'],        bankValue: 2, isMultiColor: false, count: 2 },
   { colors: ['red', 'yellow'],         bankValue: 3, isMultiColor: false, count: 2 },
   { colors: ['darkBlue', 'green'],     bankValue: 4, isMultiColor: false, count: 1 },

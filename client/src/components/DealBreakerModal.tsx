@@ -14,7 +14,13 @@ interface DealBreakerModalProps {
 }
 
 function completeSets(sets: PropertySet[]): PropertySet[] {
-  return sets.filter(s => s.cards.length >= SET_SIZES[s.color]);
+  // One entry per color (the engine picks the complete set of that color)
+  const seen = new Set<string>();
+  return sets.filter(s => {
+    if (s.cards.length < SET_SIZES[s.color] || seen.has(s.color)) return false;
+    seen.add(s.color);
+    return true;
+  });
 }
 
 export default function DealBreakerModal({ dealBreakerCard, players, myPlayerId, cardMap, sendAction, onClose }: DealBreakerModalProps) {

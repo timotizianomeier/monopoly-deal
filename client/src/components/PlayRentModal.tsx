@@ -14,10 +14,9 @@ interface PlayRentModalProps {
   onClose: () => void;
 }
 
-function calcRent(sets: PropertySet[], color: Color): number {
-  const set = sets.find(s => s.color === color);
-  if (!set || set.cards.length === 0) return 0;
-  const ladder = RENT_LADDERS[color];
+function rentForSet(set: PropertySet): number {
+  if (set.cards.length === 0) return 0;
+  const ladder = RENT_LADDERS[set.color];
   const idx = Math.min(set.cards.length - 1, ladder.length - 1);
   let rent = ladder[idx] ?? 0;
   if (set.hasHouse) rent += HOUSE_BONUS;
@@ -25,14 +24,23 @@ function calcRent(sets: PropertySet[], color: Color): number {
   return rent;
 }
 
+/** Rent for a color = the best-earning set of that color (a player may own several). */
+function calcRent(sets: PropertySet[], color: Color): number {
+  return Math.max(0, ...sets.filter(s => s.color === color).map(rentForSet));
+}
+
+function bestSet(sets: PropertySet[], color: Color): PropertySet | undefined {
+  return sets.filter(s => s.color === color).sort((a, b) => rentForSet(b) - rentForSet(a))[0];
+}
+
 export default function PlayRentModal({ rentCard, hand, myPropertySets, players, myPlayerId, sendAction, onClose }: PlayRentModalProps) {
   const rc = rentCard as RentCard;
   const opponents = players.filter(p => p.id !== myPlayerId);
 
   // Determine eligible colors
-  const eligibleColors: Color[] = rc.isWild
+  const eligibleColors: Color[] = Array.from(new Set(rc.isWild
     ? myPropertySets.map(s => s.color)
-    : rc.colors.filter(c => myPropertySets.some(s => s.color === c));
+    : rc.colors.filter(c => myPropertySets.some(s => s.color === c))));
 
   const [chosenColor, setChosenColor] = useState<Color | null>(eligibleColors[0] ?? null);
   const [targetId, setTargetId] = useState<string>(opponents[0]?.id ?? '');
@@ -82,7 +90,7 @@ export default function PlayRentModal({ rentCard, hand, myPropertySets, players,
               )}
               {eligibleColors.map(c => {
                 const rent = calcRent(myPropertySets, c);
-                const set = myPropertySets.find(s => s.color === c)!;
+                const set = bestSet(myPropertySets, c)!;
                 const setSize = SET_SIZES[c];
                 return (
                   <button

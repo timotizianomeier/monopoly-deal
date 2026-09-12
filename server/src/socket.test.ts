@@ -335,3 +335,95 @@ describe('Socket.IO integration', () => {
     expect(aliceHandAfter).toEqual(aliceHandBefore);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Regression tests from the 2026-09 remote-play audit
+// ---------------------------------------------------------------------------
+
+describe('Remote-play regressions', () => {
+  let port: number;
+  let close: () => Promise<void>;
+  const clients: TestClient[] = [];
+
+  beforeEach(async () => {
+    initDb();
+    const s = await makeServer();
+    port = s.port;
+    close = s.close;
+  });
+
+  afterEach(async () => {
+    for (const c of clients) c.disconnect();
+    clients.length = 0;
+    await close();
+  });
+
+  it('a page reload (stored playerId, empty name) resumes the seat', async () => {
+    const [alice, bob] = [connect(port), connect(port)];
+    clients.push(alice, bob);
+    await connected(alice);
+    await connected(bob);
+
+    const { roomCode, playerId: bobId } = await new Promise<{ roomCode: string; playerId: string }>((resolve, reject) => {
+      alice.emit('room:create', { name: 'Alice' }, res => {
+        if ('error' in res) return reject(new Error(res.error));
+        bob.emit('room:join', { roomCode: res.roomCode, name: 'Bob' }, r2 => {
+          if ('error' in r2) reject(new Error(r2.error));
+          else resolve({ roomCode: res.roomCode, playerId: r2.playerId });
+        });
+      });
+    });
+
+    const bobViewP = waitFor<{ view: RedactedGameView }>(bob, 'game:view');
+    alice.emit('game:start');
+    const { view: before } = await bobViewP;
+
+    bob.disconnect();
+    const bobReloaded = connect(port);
+    clients.push(bobReloaded);
+    await connected(bobReloaded);
+
+    const viewP = waitFor<{ view: RedactedGameView }>(bobReloaded, 'game:view');
+    const res = await new Promise<{ playerId: string } | { error: string }>(resolve =>
+      (bobReloaded as any).emit('room:join', { roomCode, name: '', playerId: bobId }, resolve)
+    );
+    expect(res).toEqual({ playerId: bobId });
+    const { view: after } = await viewP;
+    expect(after.myPlayerId).toBe(bobId);
+    expect(after.players.find(p => p.id === bobId)!.hand).toEqual(before.players.find(p => p.id === bobId)!.hand);
+  });
+
+  it('pending interactions carry an expiresAt deadline', async () => {
+    const [alice, bob] = [connect(port), connect(port)];
+    clients.push(alice, bob);
+    await connected(alice);
+    await connected(bob);
+    const roomCode = await new Promise<string>((resolve, reject) => {
+      alice.emit('room:create', { name: 'Alice' }, res => {
+        if ('error' in res) return reject(new Error(res.error));
+        bob.emit('room:join', { roomCode: res.roomCode, name: 'Bob' }, r2 => ('error' in r2 ? reject(new Error(r2.error)) : resolve(res.roomCode)));
+      });
+    });
+    expect(roomCode).toHaveLength(5);
+
+    let aliceView: RedactedGameView | null = null;
+    alice.on('game:view', p => { aliceView = p.view; });
+    alice.emit('game:start');
+    await waitFor(alice, 'game:view');
+    alice.emit('game:action', { action: { type: 'START_TURN' } });
+    await waitFor<{ view: RedactedGameView }>(alice, 'game:view', p => p.view.phase === 'PLAYING');
+
+    const me = aliceView!.players.find(p => p.id === aliceView!.myPlayerId)!;
+    const birthday = me.hand!.find(c => c.type === 'action' && c.action === 'birthday');
+    const debtCollector = me.hand!.find(c => c.type === 'action' && c.action === 'debtCollector');
+    const card = birthday ?? debtCollector;
+    if (!card) return; // hand has no targeted action with this shuffle — nothing to assert
+    alice.emit('game:action', {
+      action: card.action === 'birthday'
+        ? { type: 'PLAY_BIRTHDAY', cardId: card.id }
+        : { type: 'PLAY_DEBT_COLLECTOR', cardId: card.id, targetId: aliceView!.players.find(p => p.id !== me.id)!.id },
+    });
+    const { view } = await waitFor<{ view: RedactedGameView }>(alice, 'game:view', p => p.view.phase === 'AWAITING_RESPONSES');
+    expect(view.pendingInteraction?.expiresAt).toBeGreaterThan(Date.now());
+  });
+});

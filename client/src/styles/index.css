@@ -130,17 +130,22 @@ html, body, #root {
   margin: 4px;
 }
 .card__back-oval {
-  background: rgba(255,255,255,0.9);
+  background: rgba(255,255,255,0.92);
   color: #b03a2e;
   font-weight: 900;
-  font-size: 0.75rem;
-  letter-spacing: 0.03em;
   border-radius: 50%;
-  padding: 0.45em 0.5em;
-  transform: rotate(-18deg);
+  padding: 0.5em 0.6em;
+  transform: rotate(-14deg);
   box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1;
 }
-.card--tiny .card__back-oval { font-size: 0.55rem; }
+.card__back-brand { font-size: 0.42rem; letter-spacing: 0.08em; }
+.card__back-deal { font-size: 0.8rem; letter-spacing: 0.04em; }
+.card--tiny .card__back-brand { font-size: 0.3rem; }
+.card--tiny .card__back-deal { font-size: 0.55rem; }
 
 /* Corner value badge (all face-up cards) */
 .card__value-badge {
@@ -175,7 +180,9 @@ html, body, #root {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #fdfbf3;
+  background:
+    repeating-linear-gradient(45deg, rgba(0,0,0,0.035) 0 2px, transparent 2px 6px),
+    #fdfbf3;
   border: 3px double;
   border-radius: var(--card-radius);
   margin: 2px;
@@ -184,12 +191,15 @@ html, body, #root {
 }
 .card__money-oval {
   border-radius: 50%;
-  padding: 0.55em 0.5em;
+  width: 46px;
+  height: 46px;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: inset 0 0 0 1.5px rgba(255,255,255,0.55);
+  box-shadow: inset 0 0 0 2px rgba(255,255,255,0.7), 0 0 0 2px currentColor;
 }
+.card--small .card__money-oval { width: 34px; height: 34px; }
+.card--tiny .card__money-oval { width: 26px; height: 26px; }
 .card__money-amount { font-size: 0.95rem; font-weight: 900; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.35); white-space: nowrap; }
 .card--small .card__money-amount { font-size: 0.75rem; }
 .card--tiny .card__money-amount { font-size: 0.6rem; }
@@ -248,7 +258,8 @@ html, body, #root {
   padding-top: 1px;
 }
 
-/* Wildcard — two color bands top/bottom with swap arrow between */
+/* Wildcard — two halves (each with its color band + rent ladder), bottom half
+   printed upside-down like the physical card, swap arrow on the divider */
 .card__wildcard {
   flex: 1;
   display: flex;
@@ -256,23 +267,51 @@ html, body, #root {
   background: #fdfbf3;
   position: relative;
 }
+.card__wildcard-half {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.card__wildcard-half--flipped { transform: rotate(180deg); }
 .card__wildcard-band {
-  height: 26%;
-  min-height: 18px;
+  min-height: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.52rem;
+  font-size: 0.5rem;
   font-weight: 800;
   text-transform: uppercase;
   text-align: center;
   padding: 2px 18px;
   border-bottom: 1.5px solid rgba(0,0,0,0.35);
+  line-height: 1.1;
 }
-.card--tiny .card__wildcard-band { padding: 2px 3px; }
-.card__wildcard-band--bottom { border-bottom: none; border-top: 1.5px solid rgba(0,0,0,0.35); }
+.card--tiny .card__wildcard-band { padding: 2px 3px; flex: 1; }
 .card__wildcard-band.text-dark { color: #222; }
 .card__wildcard-band.text-light { color: #fff; text-shadow: 0 1px 1px rgba(0,0,0,0.35); }
+.card__wildcard-ladder {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0;
+  padding: 1px 4px;
+  color: #333;
+}
+.card__wildcard-ladder .card__property-rent-row { font-size: 0.48rem; line-height: 1.15; }
+.card__wildcard-divider {
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.05);
+  border-top: 1px solid rgba(0,0,0,0.2);
+  border-bottom: 1px solid rgba(0,0,0,0.2);
+  position: relative;
+  z-index: 1;
+}
+.card--tiny .card__wildcard-divider { height: 8px; }
 .card__wildcard-center {
   flex: 1;
   display: flex;
@@ -281,8 +320,8 @@ html, body, #root {
   justify-content: center;
   gap: 2px;
 }
-.card__wildcard-swap { width: 22px; height: 22px; }
-.card--tiny .card__wildcard-swap { width: 14px; height: 14px; }
+.card__wildcard-swap { width: 12px; height: 12px; }
+.card--tiny .card__wildcard-swap { width: 7px; height: 7px; }
 .card__wildcard-stripes {
   display: flex;
   flex-direction: column;
@@ -1370,3 +1409,5 @@ html, body, #root {
   .card { width: 64px; min-height: 90px; }
   .card--small { width: 48px; min-height: 64px; }
 }
+
+.payment-prompt__timer { font-size: 0.8rem; opacity: 0.8; margin-bottom: 0.5rem; }

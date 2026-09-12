@@ -26,7 +26,7 @@ export default function PropertySetsView({ sets, cardMap, compact = false }: Pro
 
   return (
     <div className="property-sets">
-      {sets.map(set => {
+      {sets.map((set, idx) => {
         const setSize = SET_SIZES[set.color];
         const isComplete = set.cards.length >= setSize;
         const rent = getRentForSet(set);
@@ -34,7 +34,7 @@ export default function PropertySetsView({ sets, cardMap, compact = false }: Pro
 
         return (
           <div
-            key={set.color}
+            key={`${set.color}-${idx}`}
             className={['property-set', isComplete ? 'property-set--complete' : ''].filter(Boolean).join(' ')}
             style={{ borderColor: bgColor }}
           >
@@ -100,7 +100,7 @@ export function SetPicker({ sets, cardMap, selectedColor, onSelect, filterFn }: 
 
   return (
     <div className="set-picker">
-      {eligible.map(set => {
+      {eligible.map((set, idx) => {
         const setSize = SET_SIZES[set.color];
         const isComplete = set.cards.length >= setSize;
         const bgColor = COLOR_MAP[set.color];
@@ -108,7 +108,7 @@ export function SetPicker({ sets, cardMap, selectedColor, onSelect, filterFn }: 
 
         return (
           <button
-            key={set.color}
+            key={`${set.color}-${idx}`}
             className={['set-picker__item', isSelected ? 'set-picker__item--selected' : ''].filter(Boolean).join(' ')}
             style={{ borderColor: bgColor, backgroundColor: isSelected ? bgColor + '33' : undefined }}
             onClick={() => onSelect(set.color)}
